@@ -78,6 +78,31 @@ class Attention(nn.Module):
 
         return y
 
-        
 
+class FeedForward(nn.Module):
+    """Feed-forward module with GELU activation."""
+    def __init__(self, config):
+        super(FeedForward, self).__init__()
+        # Gate and up-projections project from hidden_size to intermediate_size
+        self.gate_proj = nn.Linear(config.emb_dim, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.emb_dim, config.intermediate_size, bias=False)
+        
+        # Down projection brings the dimension back to hidden_size
+        self.down_proj = nn.Linear(config.intermediate_size, config.emb_dim, bias=False)
+        
+        # SiLU activation function (also known as Swish)
+        self.act_fn = F.silu
+
+    def forward(self, x):
+        # Apply gate and up projections
+        gate_output = self.act_fn(self.gate_proj(x))  # SiLU activation
+        up_output = self.up_proj(x)
+        
+        # Element-wise multiplication of gate and up projections
+        intermediate_output = gate_output * up_output
+        
+        # Project back to hidden size
+        output = self.down_proj(intermediate_output)
+        
+        return output
         
