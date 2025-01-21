@@ -90,7 +90,7 @@ class FeedForward(nn.Module):
         # Down projection brings the dimension back to hidden_size
         self.down_proj = nn.Linear(config.intermediate_size, config.emb_dim, bias=False)
         
-        # SiLU activation function (also known as Swish)
+        # SiLU activation function
         self.act_fn = F.silu
 
         # Dropout layer
@@ -124,4 +124,37 @@ class TransformerBlock(nn.Module):
         x = x + self.attention(self.input_layernorm(x))
         x = x + self.feed_forward(self.attention_layernorm(x))
         
-        return x    
+        return x 
+
+
+class SmolLM(nn.Module):
+    """Small language model with transformer blocks."""
+    def __init__(self, config):
+        super(SmolLM, self).__init__()
+        self.wte = nn.Embedding(config.vocab_size, config.emb_dim)
+        self.transformer_blocks = nn.ModuleList([
+            TransformerBlock(config) for _ in range(config.num_layers)
+        ])
+
+        self.lm_head = nn.Linear(config.emb_dim, config.vocab_size)
+        self.apply(self._init_weights)
+        self.layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)
+    
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def forward(self, x):
+        x = self.wte(x)
+        for block in self.transformer_blocks:
+            x = block(x)
+        x = self.layernorm(x)
+        
+        return x
+
+
