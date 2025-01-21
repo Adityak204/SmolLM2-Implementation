@@ -80,7 +80,7 @@ class Attention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    """Feed-forward module with GELU activation."""
+    """Feed-forward module with SiLU activation."""
     def __init__(self, config):
         super(FeedForward, self).__init__()
         # Gate and up-projections project from hidden_size to intermediate_size
