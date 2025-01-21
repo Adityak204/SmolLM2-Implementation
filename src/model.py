@@ -154,7 +154,8 @@ class SmolLM(nn.Module):
         for block in self.transformer_blocks:
             x = block(x)
         x = self.layernorm(x)
+        logits = self.lm_head(x)
         
-        return x
+        return logits
 
 
