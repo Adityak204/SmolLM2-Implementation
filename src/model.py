@@ -93,6 +93,9 @@ class FeedForward(nn.Module):
         # SiLU activation function (also known as Swish)
         self.act_fn = F.silu
 
+        # Dropout layer
+        self.dropout = nn.Dropout(config.dropout)
+
     def forward(self, x):
         # Apply gate and up projections
         gate_output = self.act_fn(self.gate_proj(x))  # SiLU activation
@@ -103,6 +106,22 @@ class FeedForward(nn.Module):
         
         # Project back to hidden size
         output = self.down_proj(intermediate_output)
+        output = self.dropout(output)
         
         return output
+    
+
+class TransformerBlock(nn.Module):
+    """Transformer block with attention and feed-forward modules."""
+    def __init__(self, config):
+        super(TransformerBlock, self).__init__()
+        self.attention = Attention(config)
+        self.feed_forward = FeedForward(config)
+        self.input_layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)
+        self.attention_layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)  
+
+    def forward(self, x):
+        x = x + self.attention(self.input_layernorm(x))
+        x = x + self.feed_forward(self.attention_layernorm(x))
         
+        return x    
