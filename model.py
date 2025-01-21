@@ -79,8 +79,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class Attention(nn.Module):
-    """Multi-head attention module."""
-    def __init_(self, config):
+    """Multi-head attention module with support for GQA (Grouped Query Attention)."""
+    def __init__(self, config):
         super(Attention, self).__init__()
         self.emb_dim = config.emb_dim
         self.n_q_heads = config.n_q_heads
@@ -94,61 +94,62 @@ class Attention(nn.Module):
         self.v_proj = nn.Linear(self.emb_dim, self.head_dim * self.n_kv_heads)
         self.o_proj = nn.Linear(self.emb_dim, self.emb_dim)
         
-        # Dropout
-        self.att_dropout = nn.Dropout(config.dropout)
+        # Initialize rotary embeddings
+        self.rotary_embedding = LlamaRotaryEmbedding(dim=self.head_dim)
+        
+        # Dropout layers
+        self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-
 
         # Causal mask
         self.register_buffer(
             "mask",
-            torch.tril(config.max_seq_len, config.max_seq_len).view(1, 1, config.max_seq_len, config.max_seq_len),
+            torch.tril(torch.ones(config.max_seq_len, config.max_seq_len)).view(
+                1, 1, config.max_seq_len, config.max_seq_len
+            ),
         )
 
     def forward(self, x):
-        B, T, C = x.size()
+        B, T, C = x.size()  # batch_size, seq_len, emb_dim
 
         # Project Q, K, V
-        q = self.q_proj(x) # (B, T, C)
-        k = self.k_proj(x) # (B, T, C)
-        v = self.v_proj(x) # (B, T, C)
+        q = self.q_proj(x)  # (B, T, emb_dim)
+        k = self.k_proj(x)  # (B, T, n_kv_heads * head_dim)
+        v = self.v_proj(x)  # (B, T, n_kv_heads * head_dim)
 
         # Reshape Q, K, V
-        q = q.view(B, T, self.n_q_heads, self.head_dim) # (B, T, n_q_heads, head_dim)
-        k = k.view(B, T, self.n_kv_heads, self.head_dim) # (B, T, n_kv_heads, head_dim)
-        v = v.view(B, T, self.n_kv_heads, self.head_dim) # (B, T, n_kv_heads, head_dim)
+        q = q.view(B, T, self.n_q_heads, self.head_dim)  # (B, T, n_q_heads, head_dim)
+        k = k.view(B, T, self.n_kv_heads, self.head_dim)  # (B, T, n_kv_heads, head_dim)
+        v = v.view(B, T, self.n_kv_heads, self.head_dim)  # (B, T, n_kv_heads, head_dim)
 
-        # Applying RoPE on Q, K
+        # Apply rotary embeddings
         q, k = self.rotary_embedding(q, k)
         
-        # Reshape Q, K, V
-        q = q.transpose(1, 2) # (B, n_q_heads, T, head_dim)
-        k = k.transpose(1, 2) # (B, n_kv_heads, T, head_dim)
-        v = v.transpose(1, 2) # (B, n_kv_heads, T, head_dim)
+        # Reshape for attention computation
+        q = q.transpose(1, 2)  # (B, n_q_heads, T, head_dim)
+        k = k.transpose(1, 2)  # (B, n_kv_heads, T, head_dim)
+        v = v.transpose(1, 2)  # (B, n_kv_heads, T, head_dim)
 
-        # Repeat keys and values
-        k = repeat_kv(k, self.n_rep)
-        v = repeat_kv(v, self.n_rep)
+        # Repeat K and V for GQA
+        k = repeat_kv(k, self.n_rep)  # (B, n_q_heads, T, head_dim)
+        v = repeat_kv(v, self.n_rep)  # (B, n_q_heads, T, head_dim)
 
         # Compute attention scores
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))  # (B, nh, T, T)
+        scale = 1.0 / math.sqrt(self.head_dim)
+        att = (q @ k.transpose(-2, -1)) * scale  # (B, n_q_heads, T, T)
         att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
 
         # Apply attention to values
-        y = att @ v  # (B, nh, T, hs)
+        y = att @ v  # (B, n_q_heads, T, head_dim)
 
         # Reshape and project output
-        y = y.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, C)
+        y = y.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, emb_dim)
         y = self.o_proj(y)
         y = self.resid_dropout(y)
 
         return y
-
-
-
-
 
         
 
