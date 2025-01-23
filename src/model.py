@@ -174,3 +174,17 @@ class SmolLM(nn.Module):
         logits = self.lm_head(x)
 
         return logits
+
+
+# @dataclass
+# class Config:
+#     vocab_size: int = 49152
+#     emb_dim: int = 576
+#     intermediate_size: int = 1536
+#     num_layers: int = 10
+#     n_q_heads: int = 9
+#     n_kv_heads: int = 3
+#     max_seq_len: int = 8192
+#     dropout: float = 0.1
+#     rms_norm_eps: float = 1e-05
+#     init_std: float = 0.041666666666666664
