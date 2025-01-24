@@ -1,16 +1,16 @@
+import os
+from datetime import datetime
+import torch
+import numpy as np
 from datasets import load_dataset
 from transformers import AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import os
-from datetime import datetime
-from src.model import SmolLM2
-from dataclasses import dataclass
-from loguru import logger
-import torch
 from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 from loguru import logger
+from dataclasses import dataclass
+
+from src.model import SmolLM2
 
 
 @dataclass
@@ -29,10 +29,7 @@ class MainConfig:
 
 config = MainConfig()
 
-cosmo_micro_ds = load_dataset("Syed-Hasan-8503/cosmopedia-10k", split="train")
 
-
-## Custom Dataset on top of Huggingface's Dataset
 class CustomDataset(Dataset):
     def __init__(self, dataset, config):
         self.dataset = dataset
@@ -58,12 +55,11 @@ class CustomDataset(Dataset):
         return x, y
 
 
-## DataLoader
+cosmo_micro_ds = load_dataset("Syed-Hasan-8503/cosmopedia-10k", split="train")
 custom_ds = CustomDataset(cosmo_micro_ds, config)
 dataloader = DataLoader(custom_ds, batch_size=4, shuffle=True)
 
 
-## Training using Pytorch Lightning
 class CustomProgressBar(TQDMProgressBar):
     def __init__(self):
         super().__init__()
@@ -75,12 +71,14 @@ class CustomProgressBar(TQDMProgressBar):
 
 
 class SmolLit(LightningModule):
-    def __init__(self, model, config, checkpoint_path="kaggle/working"):
+    def __init__(self, model, config):
         super().__init__()
         self.model = model
         self.config = config
         self.best_loss = np.inf
-        self.checkpoint_path = checkpoint_path
+        self.checkpoint_path = "kaggle/working"
+        self.tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+        self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def forward(self, x):
         return self.model(x)
@@ -92,7 +90,50 @@ class SmolLit(LightningModule):
             outputs.view(-1, outputs.size(-1)), y.flatten()
         )
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        # Log prediction every 500 epochs
+        if self.current_epoch % 500 == 0:
+            self.log_prediction()
+
         return loss
+
+    def log_prediction(self):
+        # Greedy decoding for the prompt
+        prompt = "Which is the fastest"
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
+
+        # Generate using greedy decoding
+        generated_ids = self.greedy_decode(input_ids)
+
+        # Decode and log the prediction
+        generated_text = self.tokenizer.decode(
+            generated_ids[0], skip_special_tokens=True
+        )
+        logger.info(f"Epoch {self.current_epoch} Prediction: {generated_text}")
+
+    def greedy_decode(self, input_ids, max_length=100):
+        self.model.eval()
+        current_ids = input_ids
+
+        with torch.no_grad():
+            for _ in range(max_length - current_ids.shape[1]):
+                # Get model outputs
+                outputs = self.model(current_ids)
+
+                # Get the last token prediction
+                last_token_logits = outputs[:, -1, :]
+
+                # Get the most likely next token
+                next_token = torch.argmax(last_token_logits, dim=-1).unsqueeze(0)
+
+                # Append the most likely token
+                current_ids = torch.cat([current_ids, next_token], dim=1)
+
+                # Stop if end of sequence token
+                if next_token.item() == self.tokenizer.eos_token_id:
+                    break
+
+        return current_ids
 
     def on_train_epoch_end(self):
         avg_loss = self.trainer.callback_metrics["train_loss"].mean()
@@ -137,10 +178,9 @@ def setup_logging(log_dir="kaggle/working"):
 
 def main(model):
     setup_logging()
+    model = SmolLM2(config)
     smol_lit = SmolLit(model, config)
-    checkpoint_path = "kaggle/working"
 
-    latest_checkpoint = None
     progress_bar = CustomProgressBar()
     trainer = Trainer(
         max_epochs=5000,
@@ -152,12 +192,8 @@ def main(model):
         enable_progress_bar=True,
     )
 
-    if latest_checkpoint:
-        logger.info(f"Resuming training from checkpoint: {latest_checkpoint}")
-        trainer.fit(model, checkpoint_path=latest_checkpoint)
-    else:
-        logger.info("Starting training from scratch")
-        trainer.fit(model)
+    logger.info("Starting training from scratch")
+    trainer.fit(model)
 
 
 if __name__ == "__main__":
