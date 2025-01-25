@@ -3,6 +3,9 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer
 import os
+from dataclasses import dataclass
+
+from src.model import SmolLM
 
 
 def greedy_decode(model, input_ids, max_length=100, tokenizer=None):
@@ -50,16 +53,36 @@ def main():
 
     # Load the model (you'll need to replace this with your actual model loading logic)
     @st.cache_resource
-    def load_model():
-        # This is a placeholder - replace with your actual model loading code
-        from transformers import AutoModelForCausalLM
-
-        model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+    def load_model(config):
+        model = SmolLM(config)
         return model
 
     # Try to load the model
     try:
-        model = load_model()
+
+        @dataclass
+        class MainConfig:
+            vocab_size: int = 49152
+            emb_dim: int = 576
+            intermediate_size: int = 1536
+            num_layers: int = 30
+            n_q_heads: int = 9
+            n_kv_heads: int = 3
+            max_seq_len: int = 1024
+            dropout: float = 0.1
+            rms_norm_eps: float = 1e-05
+            init_std: float = 0.041666666666666664
+
+        config = MainConfig()
+        model = load_model(config)
+        # load checkpoint
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        checkpoint_path = "/Users/aditya/Documents/self_learning/ERA V3/week 13/artifacts/m1/smolLM-v2.pth"
+        checkpoint = torch.load(checkpoint_path, map_location=device)[
+            "model_state_dict"
+        ]
+        model.load_state_dict(checkpoint)
+
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return

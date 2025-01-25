@@ -5,6 +5,18 @@ import math
 from src.utils import LlamaRotaryEmbedding, repeat_kv
 
 
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        # Root Mean Square Layer Normalization
+        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * rms * self.weight
+
+
 class Attention(nn.Module):
     """Multi-head attention module with support for GQA (Grouped Query Attention)."""
 
@@ -126,8 +138,8 @@ class TransformerBlock(nn.Module):
         super(TransformerBlock, self).__init__()
         self.attention = Attention(config)
         self.feed_forward = FeedForward(config)
-        self.input_layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)
-        self.attention_layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)
+        self.input_layernorm = RMSNorm(config.emb_dim, config.rms_norm_eps)
+        self.attention_layernorm = RMSNorm(config.emb_dim, config.rms_norm_eps)
 
     def forward(self, x):
         x = x + self.attention(self.input_layernorm(x))
@@ -149,7 +161,7 @@ class SmolLM(nn.Module):
 
         self.lm_head = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
         self.apply(self._init_weights)
-        self.layernorm = nn.RMSNorm(config.emb_dim, config.rms_norm_eps)
+        self.layernorm = RMSNorm(config.emb_dim, config.rms_norm_eps)
 
         # weight sharing
         self.lm_head.weight = self.wte.weight
@@ -172,7 +184,6 @@ class SmolLM(nn.Module):
             x = block(x)
         x = self.layernorm(x)
         logits = self.lm_head(x)
-
         return logits
 
 
