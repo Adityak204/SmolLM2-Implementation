@@ -9,7 +9,7 @@ The model contains:
 - max_seq_len = 1024
 - vocab_size = 49152
 - 134.5M parameters
-<br>
+
 ![image](docs/model-details.png)
 
 # Training Highlights
