@@ -15,6 +15,7 @@ The model contains:
 - The model was trained on Kaggle T4 GPU for ~300 epochs
 - Weights have been shared between the embedding and the output layer
 - Made use of mixed precision training
+- Training logs can be found in the `logs` directory
 
 ## Model Architecture
 ```
