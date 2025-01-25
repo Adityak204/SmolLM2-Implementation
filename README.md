@@ -3,12 +3,12 @@ This is a PyTorch implementation of the SmolLM2-135M model. This contains the de
 
 # Model Overview
 The model contains:
-    - 30 Transformer Blocks
-    - 576 hidden units
-    - 9 attention heads for Q & 3 attention heads for K & V
-    - max_seq_len = 1024
-    - vocab_size = 49152
-    - 134.5M parameters
+- 30 Transformer Blocks
+- 576 hidden units
+- 9 attention heads for Q & 3 attention heads for K & V
+- max_seq_len = 1024
+- vocab_size = 49152
+- 134.5M parameters
 ![image](docs/model-details.png)
 
 # Training Highlights
