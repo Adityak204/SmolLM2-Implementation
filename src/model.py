@@ -80,15 +80,18 @@ class Attention(nn.Module):
         k = repeat_kv(k, self.n_rep)  # (B, n_q_heads, T, head_dim)
         v = repeat_kv(v, self.n_rep)  # (B, n_q_heads, T, head_dim)
 
-        # Compute attention scores
-        scale = 1.0 / math.sqrt(self.head_dim)
-        att = (q @ k.transpose(-2, -1)) * scale  # (B, n_q_heads, T, T)
-        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
+        # # Compute attention scores
+        # scale = 1.0 / math.sqrt(self.head_dim)
+        # att = (q @ k.transpose(-2, -1)) * scale  # (B, n_q_heads, T, T)
+        # att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))
+        # att = F.softmax(att, dim=-1)
+        # att = self.attn_dropout(att)
 
-        # Apply attention to values
-        y = att @ v  # (B, n_q_heads, T, head_dim)
+        # # Apply attention to values
+        # y = att @ v  # (B, n_q_heads, T, head_dim)
+
+        # Flash attention
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
         # Reshape and project output
         y = y.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, emb_dim)
