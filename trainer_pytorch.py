@@ -95,8 +95,10 @@ def train(model, dataloader, config, checkpoint_path="checkpoint", epochs=500):
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=5e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=6e-4)
 
+    # Mixed Precision Setup
+    scaler = GradScaler()
     best_loss = float("inf")
 
     for epoch in range(epochs):
@@ -111,12 +113,21 @@ def train(model, dataloader, config, checkpoint_path="checkpoint", epochs=500):
             optimizer.zero_grad()
 
             # Mixed Precision Training
-            # with autocast(device_type=device, dtype=torch.float16):
-            outputs = model(x.squeeze())
-            loss = criterion(outputs.view(-1, outputs.size(-1)), y.flatten())
+            with autocast(device_type=device, dtype=torch.float16):
+                outputs = model(x.squeeze())
+                loss = criterion(outputs.view(-1, outputs.size(-1)), y.flatten())
 
-            loss.backward()
-            optimizer.step()
+            # loss.backward()
+            # optimizer.step()
+
+            # Scales loss and calls backward() to create scaled gradients
+            scaler.scale(loss).backward()
+
+            # Unscales gradients and calls optimizer.step()
+            scaler.step(optimizer)
+
+            # Updates the scale for next iteration
+            scaler.update()
 
             total_loss += loss.item()
 
@@ -188,8 +199,8 @@ if __name__ == "__main__":
 
     # Load dataset
     cosmo_micro_ds = load_dataset("Syed-Hasan-8503/cosmopedia-10k", split="train")
-    custom_ds = CustomDataset(cosmo_micro_ds, config, fraction=0.05)
-    dataloader = DataLoader(custom_ds, batch_size=2, shuffle=True, num_workers=2)
+    custom_ds = CustomDataset(cosmo_micro_ds, config, fraction=0.15)
+    dataloader = DataLoader(custom_ds, batch_size=8, shuffle=True, num_workers=0)
 
     # Initialize model
     model = SmolLM(config)
