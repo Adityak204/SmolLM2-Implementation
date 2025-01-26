@@ -15,7 +15,9 @@ The model contains:
 # Training Highlights
 - The model was trained on Kaggle T4 GPU for ~300 epochs
 - Weights have been shared between the embedding and the output layer
-- Made use of mixed precision training
+- Made use of mixed precision training for faster training and reduced memory usage
+- Pytorch impelmentation of Flash Attention is used for speed-up
+- Training speed: 1.4*8*1024 tokens/sec ~ 11k tokens/sec
 - Training logs can be found in the `log_files` directory
 
 ## Model Architecture
